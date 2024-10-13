@@ -1,0 +1,47 @@
+import { loadFlash } from 'sveltekit-flash-message/server';
+import { SESSION_COOKIE_NAME } from '$lib/constants';
+import { createBaseMetaTags } from '$lib/utils/metaTags';
+import Database from 'better-sqlite3';
+import path from 'path';
+
+export const load = loadFlash(async ({ url, cookies }) => {
+  const baseMetaTags = createBaseMetaTags(url);
+  const session = cookies.get(SESSION_COOKIE_NAME);
+  const dbPath = path.resolve('/Users/oakky/Documents/star_rail/list/src/dbforTrain.db');
+  
+  let result;
+
+  try {
+    const db = new Database(dbPath);
+    // Fetch data synchronously since better-sqlite3 is synchronous
+    result = db
+      .prepare(`
+        SELECT
+          r.reserved_seat_id, reserve_status, r.trip_id, r.passenger_id, r.booking_datetime,
+          r.from_station_id, r.to_station_id, r.payment_id,
+          s.seat_id, s.seat_type,
+          st.price,
+          sta_from.station_name AS from_station_name,
+          sta_to.station_name AS to_station_name,
+          t.from_datetime, t.route
+        FROM RESERVATIONS r
+        JOIN TRIPS t ON r.trip_id = t.trip_id
+        JOIN STATIONS sta_from ON sta_from.station_id = r.from_station_id
+        JOIN STATIONS sta_to ON sta_to.station_id = r.to_station_id
+        JOIN SEAT s ON s.seat_id = r.reserved_seat_id
+        JOIN SEAT_TYPE st ON s.seat_type = st.seat_type
+      `)
+      .all();
+    db.close(); // Close the database connection
+  } catch (error) {
+    console.error('Database query failed:', error);
+    // You might want to handle the error more gracefully in production
+    throw error;
+  }
+
+  return {
+    session,
+    baseMetaTags: Object.freeze(baseMetaTags),
+    result // Include the fetched data in the returned object
+  };
+});

@@ -1,0 +1,60 @@
+import Database from 'better-sqlite3';
+import path from 'path';
+
+export async function load({ url }) {
+  const dbPath = path.resolve('/Users/oakky/Documents/real_final/src/lib/databaseStorage/dbforTrain-2.db');
+  const db = new Database(dbPath);
+
+  try {
+    // ดึงข้อมูลสถานีทั้งหมดสำหรับตัวเลือกเส้นทาง
+    const stationsQuery = `
+      SELECT station_id, station_name
+      FROM STATIONS
+      WHERE station_id LIKE '%nl%'
+      OR station_id LIKE '%ne%'
+      OR station_id IN ('st_01', 'st_02', 'st_03');
+    `;
+    const stations = db.prepare(stationsQuery).all();
+
+    const origin = url.searchParams.get('origin');
+    const destination = url.searchParams.get('destination');
+    const date = url.searchParams.get('date'); // ดึงวันที่จาก query parameter
+
+    let trips = [];
+    if (origin && destination && date) {
+      // Query ที่ตรวจสอบว่าต้นทาง-ปลายทางของผู้ใช้เลือกอยู่ในวันนั้นๆ
+      const tripsQuery = `
+        SELECT 
+          CONCAT(UPPER(SUBSTRING(t.trip_id, 4, 2)), SUBSTRING(t.trip_id, 7)) AS trip_name,
+          s1.station_name AS start_name, 
+          s2.station_name AS end_name,
+          t.from_datetime
+        FROM TRIPS t 
+        JOIN STATIONS s1 ON t.start_station_id = s1.station_id 
+        JOIN STATIONS s2 ON t.end_station_id = s2.station_id 
+        WHERE DATE(t.from_datetime) = ? -- กรองตามวันที่
+          AND t.start_station_id = ?
+          AND t.end_station_id = ?
+        ORDER BY t.from_datetime;
+      `;
+      trips = db.prepare(tripsQuery).all(date, origin, destination); // ส่งค่าวันที่ไปใน query
+    }
+
+    console.log('Trips fetched:', trips); // debug
+
+    return {
+      stations,
+      trips
+    };
+
+  } catch (error) {
+    console.error('Error fetching data:', error);
+    return {
+      stations: [],
+      trips: [],
+      error: 'Unable to fetch data from the database'
+    };
+  } finally {
+    db.close();
+  }
+}

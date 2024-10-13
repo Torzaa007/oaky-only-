@@ -1,0 +1,109 @@
+<script>
+  export let data;
+  let trips = data.trips;
+  let stations = data.stations;
+  let editingTripId = null;
+  let editingStationId = null;
+  let showAddTripForm = false;  // Toggle visibility of the Add Trip form
+  let showAddStationForm = false
+  let groupedStations = {};
+  console.log(trips)
+
+  for (let i = 0; i < stations.length; i++) {
+    const station = stations[i];
+    const stationId = station['station_id'];
+    const stationName = station['station_name'];
+    const timeInSeconds = timeToSeconds(station['time_use']);
+
+    // Extract prefix based on first underscore ('_')
+    const prefix = stationId.split('_')[1];
+
+    // Initialize the array for this prefix if it doesn't exist
+    if (!groupedStations[prefix]) {
+      groupedStations[prefix] = [];
+    }
+
+    // Add station data to the appropriate group
+    groupedStations[prefix].push([stationId, stationName, timeInSeconds]);
+  }
+
+  let lstLine = Object.keys(groupedStations)
+  let locationDict = {}
+
+  for (let i = 0; i < lstLine.length; i++) {
+    let temLst = [];
+    for (let j = 0; j < groupedStations[lstLine[i]].length; j++) {
+        temLst.push(groupedStations[lstLine[i]][j][1]);
+      }
+    locationDict[lstLine[i]] = temLst;
+  }
+
+
+  function timeToSeconds(timeStr) {
+  const [hours, minutes, seconds] = timeStr.split(':').map(Number);
+  return (hours * 3600) + (minutes * 60) + seconds;
+}
+
+  function findTime(start, end) {
+  for (let i = 0; i < lstLine.length; i++) {
+    if (locationDict[lstLine[i]].includes(start) && locationDict[lstLine[i]].includes(end)) {
+      //console.log(groupedStations[lstLine[i]]);
+
+      let stations = groupedStations[lstLine[i]];
+      stations.sort((a, b) => {
+        const numA = parseInt(a[0].split('_')[2]); // Extract the number from 'st_nl_xx'
+        const numB = parseInt(b[0].split('_')[2]);
+        return numA - numB; // Compare the numbers
+      });
+
+      //console.log(stations);
+
+      // Find the indices of the start and end stations
+      let startIndex = stations.findIndex(station => station[1] === start);
+      let endIndex = stations.findIndex(station => station[1] === end);
+
+      let totalTime = 0;
+
+      if (startIndex < endIndex) {
+        // Forward trip (start comes before end)
+        for (let j = startIndex + 1; j <= endIndex; j++) {
+          totalTime += stations[j][2]; // Add the time
+        }
+      } else if (startIndex > endIndex) {
+        // Reverse trip (end comes before start)
+        for (let j = startIndex; j >= endIndex; j--) {
+          totalTime += stations[j][2]; // Add the time
+        }
+      }
+
+      //console.log(`Total time from ${start} to ${end}: ${totalTime} seconds`);
+      return totalTime;
+    }
+  }
+}
+
+console.log(findTime('สระบุรี', 'สถานีกลางกรุงเทพอภิวัฒน์'))
+
+for (let i = 0; i < trips.length; i++) {
+    let dateTime = new Date(trips[i].from_datetime); // Your initial date-time
+    let secondsToAdd = findTime(trips[i].start, trips[i].end);
+    dateTime.setSeconds(dateTime.getSeconds() + secondsToAdd);
+
+    // Use toLocaleString to preserve local time
+    let result = dateTime.toLocaleString('sv-SE', { // 'sv-SE' gives "YYYY-MM-DDTHH:MM"
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+
+    let dateTime2 = trips[i].from_datetime; // The original date-time string
+    let formattedDateTime = dateTime2.replace('T', ' '); // Replace 'T' with a space
+
+    // Remove the seconds and format the string
+    trips[i]["from_datetime"] = formattedDateTime;
+    trips[i]["arrivalTime"] = result.replace(',','').slice(0, 16); // Format to "YYYY-MM-DDTHH:MM"
+}
+  console.log(trips)

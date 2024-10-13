@@ -1,0 +1,130 @@
+<script>
+  import { writable } from 'svelte/store';
+  import { goto, invalidate } from '$app/navigation';
+
+  export let data;
+
+  let stations = data.stations;
+  let trips = writable(data.trips || []);
+  let selectedLine = writable('');
+  let origin = writable('');
+  let destination = writable('');
+  let selectedDate = writable('');
+  let noTrips = writable(false);
+  let isLoading = writable(false);
+
+  $: filteredStations = stations.filter(station =>
+    station.station_id.includes($selectedLine) ||
+    ['st_01', 'st_02', 'st_03'].includes(station.station_id)
+  );
+
+  function updateSelectedLine(event) {
+    selectedLine.set(event.target.value);
+    origin.set('');
+    destination.set('');
+  }
+
+  function updateOrigin(event) {
+    origin.set(event.target.value);
+  }
+
+  function updateDestination(event) {
+    destination.set(event.target.value);
+  }
+
+  function updateDate(event) {
+    selectedDate.set(event.target.value);
+  }
+
+  async function showTrips() {
+    if ($origin && $destination && $selectedDate) {
+      isLoading.set(true);
+      noTrips.set(false);
+      
+      try {
+        // อัปเดต URL query parameters
+        await goto(`?origin=${$origin}&destination=${$destination}&date=${$selectedDate}`, { replaceState: true });
+        
+        // บังคับให้โหลดข้อมูลใหม่
+        await invalidate('app:data');
+        
+        // อัปเดตข้อมูล trips จาก data ที่โหลดใหม่
+        trips.set(data.trips || []);
+        
+        // ตรวจสอบว่ามี trips หรือไม่
+        if ($trips.length === 0) {
+          noTrips.set(true);
+        }
+      } catch (error) {
+        console.error('Error fetching trips:', error);
+        noTrips.set(true);
+      } finally {
+        isLoading.set(false);
+      }
+    } else {
+      alert('Please select origin, destination, and date');
+    }
+  }
+</script>
+
+<div class="container mx-auto p-4">
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+    <div>
+      <label for="line">เส้นทางโดยสาร</label>
+      <select id="line" bind:value={$selectedLine} on:change={updateSelectedLine} class="border rounded p-2 w-full">
+        <option value="">Select a line</option>
+        <option value="nl">NL Line</option>
+        <option value="ne">NE Line</option>
+      </select>
+    </div>
+
+    <div>
+      <label for="origin">ต้นทาง</label>
+      <select id="origin" bind:value={$origin} on:change={updateOrigin} class="border rounded p-2 w-full">
+        <option value="">Select origin station</option>
+        {#each filteredStations as station}
+          <option value={station.station_id}>{station.station_name}</option>
+        {/each}
+      </select>
+    </div>
+
+    <div>
+      <label for="destination">ปลายทาง</label>
+      <select id="destination" bind:value={$destination} on:change={updateDestination} class="border rounded p-2 w-full">
+        <option value="">Select destination station</option>
+        {#each filteredStations as station}
+          <option value={station.station_id}>{station.station_name}</option>
+        {/each}
+      </select>
+    </div>
+
+    <div>
+      <label for="date">วันที่เดินทาง</label>
+      <input type="date" id="date" bind:value={$selectedDate} on:change={updateDate} class="border rounded p-2 w-full">
+    </div>
+  </div>
+
+  <button on:click={showTrips} class="bg-blue-800 text-white px-4 py-2 rounded" disabled={$isLoading}>
+    {$isLoading ? 'กำลังค้นหา...' : 'แสดงเที่ยวโดยสาร'}
+  </button>
+
+  {#if $noTrips}
+    <div class="mt-4 text-red-500">ไม่พบข้อมูลเที่ยวโดยสารสำหรับการค้นหานี้</div>
+  {/if}
+
+  {#if $trips.length > 0}
+    <div class="mt-8">
+      <h2 class="text-xl font-bold mb-4">เที่ยวโดยสารที่สามารถเดินทางได้</h2>
+      {#each $trips as trip}
+        <div class="bg-gray-100 p-4 mb-2 rounded">
+          <span>จาก {trip.start_name} ถึง {trip.end_name}</span>
+        </div>
+      {/each}
+    </div>
+  {/if}
+</div>
+
+{#if $selectedLine && $origin && $destination && $selectedDate}
+  <p class="mt-4">You selected: {$origin} to {$destination} on {$selectedLine.toUpperCase()} Line for {$selectedDate}</p>
+{/if}
+
